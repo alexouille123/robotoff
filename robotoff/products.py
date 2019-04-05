@@ -12,7 +12,9 @@ import requests
 from robotoff.utils import jsonl_iter, gzip_jsonl_iter, get_logger
 from robotoff import settings
 from robotoff.utils.cache import CachedStore
+from robotoff.utils.io import concat_proto, read_concat_proto
 from robotoff.utils.types import JSONType
+from robotoff.protos import product_pb2
 
 logger = get_logger(__name__)
 
@@ -217,11 +219,63 @@ class Product:
         }
 
 
+def serialize_pb(product: JSONType) -> product_pb2.Product:
+    product_pb = product_pb2.Product()
+
+    for text_field in ('code', 'quantity', 'expiration_date'):
+        value = product.get(text_field) or None
+
+        if value is not None:
+            setattr(product_pb, text_field, value)
+
+    for list_field in ('countries_tags', 'categories_tags', 'emb_codes_tags',
+                       'labels_tags', 'brands_tags'):
+        values = product.get(list_field) or []
+
+        if values:
+            getattr(product_pb, list_field).extend(values)
+
+    return product_pb
+
+
+def minify_product_dataset_pb(dataset_path: pathlib.Path,
+                              output_path: pathlib.Path):
+    if dataset_path.suffix == '.gz':
+        jsonl_iter_func = gzip_jsonl_iter
+    else:
+        jsonl_iter_func = jsonl_iter
+
+    with gzip.open(output_path, 'wb') as output_:
+        products_iter = jsonl_iter_func(dataset_path)
+        products_pb_iter = (serialize_pb(p) for p in products_iter)
+        concat_proto(products_pb_iter, output_)
+
+
+def load_minified_dataset():
+    dataset = {}
+
+    with gzip.open(settings.DATASET_DIR / 'products.pb.gz', 'rb') as f:
+        for product in read_concat_proto(f, product_pb2.Product):
+            dataset[product.code] = product
+
+    return dataset
+
+
+def load_minified_dataset_base():
+    dataset = {}
+
+    for product in gzip_jsonl_iter(settings.DATASET_DIR /
+                                   'products-min.jsonl.gz'):
+        dataset[product.get('code')] = product
+
+    return dataset
+
+
 class ProductStore:
     def __init__(self):
         self.store: Dict[str, Product] = {}
 
-    def load(self, path: str, reset: bool=True):
+    def load(self, path: str, reset: bool = True):
         logger.info("Loading product store")
         ds = ProductDataset(path)
         stream = ds.stream()

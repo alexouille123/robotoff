@@ -1,0 +1,18 @@
+// Message to store the mapping from class label strings to class id. Datasets
+// use string labels to represent classes while the object detection framework
+// works with class ids. This message maps them so they can be converted back
+// and forth as needed.
+syntax = "proto2";
+
+package robotoff.protos;
+
+message Product {
+  optional string code = 1;
+  repeated string countries_tags = 2;
+  repeated string categories_tags = 3;
+  repeated string emb_codes_tags = 4;
+  repeated string labels_tags = 5;
+  repeated string brands_tags = 6;
+  optional string quantity = 7;
+  optional string expiration_date = 8;
+};
